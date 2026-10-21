@@ -212,3 +212,49 @@ See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more inform
 ## License
 
 This project is licensed under the Apache-2.0 License.
+
+---
+
+## Changes in this fork (cheriian/patchcore-inspection)
+
+This fork of the official PatchCore repository is maintained by Cherry for the CS3807 Deep Learning Laboratory project (B.Tech AI & DS, Shiv Nadar University Chennai). Everything above this section is the original README, unchanged. The following changes were made to run the code on Google Colab (Python 3.13, Tesla T4 GPU, 2026).
+
+1. **Dependencies:** `requirements.txt` (pinned for Python 3.8) does not install on Python 3.13, so only the missing packages were installed:
+```
+   pip install faiss-cpu click pretrainedmodels timm scikit-image
+```
+   Colab already provides PyTorch, torchvision and the other libraries.
+2. **faiss on CPU:** `faiss-gpu` is not pip-installable on current Colab, so `faiss-cpu` was used and the `--faiss_on_gpu` flag was removed. The backbone still runs on the GPU.
+3. **Bug fix in `bin/run_patchcore.py`:** `--save_segmentation_images` crashed with `AttributeError: 'MVTecDataset' object has no attribute 'transform_std'`. The missing attributes were replaced with the standard ImageNet normalisation values that the dataset already uses:
+   - `dataloaders["testing"].dataset.transform_std` → `[0.229, 0.224, 0.225]`
+   - `dataloaders["testing"].dataset.transform_mean` → `[0.485, 0.456, 0.406]`
+
+   This only affects how saved segmentation images are displayed, not the metrics.
+4. **Data loader workers:** `--num_workers 2` was added to the `dataset` command, because the default of 8 exceeds Colab's 2 CPU cores.
+5. **Logging:** `--log_online` (Weights & Biases) was not used. Results were saved to Google Drive instead.
+6. **Dataset source:** the official MVTec AD download links returned empty files, so the dataset was obtained from a Hugging Face mirror of the official release, [ProgrammerGnome/MVTecAD](https://huggingface.co/datasets/ProgrammerGnome/MVTecAD). The official page has moved to [mvtec.com/research-teaching/datasets/mvtec-ad](https://www.mvtec.com/research-teaching/datasets/mvtec-ad).
+7. **Added files:** the Colab notebook is in `project/notebooks/`. The results (`results.csv` files and example heatmaps) are in `project/results/`.
+
+### Command used (PatchCore-10%)
+
+```
+env PYTHONPATH=src python bin/run_patchcore.py --gpu 0 --seed 0 --save_patchcore_model --save_segmentation_images \
+  --log_group IM224_WR50_L2-3_P01_D1024-1024_PS-3_AN-1_S0 --log_project MVTecAD_Results /content/drive/MyDrive/patchcore_results \
+  patch_core -b wideresnet50 -le layer2 -le layer3 \
+  --pretrain_embed_dimension 1024 --target_embed_dimension 1024 --anomaly_scorer_num_nn 1 --patchsize 3 \
+  sampler -p 0.1 approx_greedy_coreset \
+  dataset --resize 256 --imagesize 224 --num_workers 2 -d bottle -d screw -d carpet mvtec /content/data/mvtec
+```
+
+For PatchCore-1%, the same command was run with `-p 0.01` and log group `IM224_WR50_L2-3_P001_D1024-1024_PS-3_AN-1_S0`.
+
+### Reproduction results
+
+Settings: WideResNet-50, layers 2+3, 224×224, seed 0. Paper values are from the supplementary Tables S1 and S2.
+
+| Category | Paper Image AUROC (10%) | Ours (10%) | Ours (1%) | Paper Pixel AUROC (10%) | Ours (10%) | Ours (1%) |
+|---|---|---|---|---|---|---|
+| Bottle | 100.0 | 100.0 | 100.0 | 98.6 | 98.5 | 98.5 |
+| Screw | 97.0 | 98.8 | 97.4 | 99.4 | 99.5 | 99.4 |
+| Carpet | 98.7 | 98.6 | 98.4 | 99.1 | 99.1 | 99.0 |
+| **Mean** | 98.6 | 99.1 | 98.6 | 99.0 | 99.0 | 99.0 |
